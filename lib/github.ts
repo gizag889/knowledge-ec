@@ -1,14 +1,20 @@
-import { GitHubItem, ArticleFrontMatter, 
-    BookConfig, Book, ChapterFrontMatter, ParsedMarkdown, Article } from "../types/github";
+import {
+  GitHubItem,
+  ArticleFrontMatter,
+  BookConfig,
+  Book,
+  ChapterFrontMatter,
+  ParsedMarkdown,
+  Article,
+} from "../types/github";
 import yaml from "js-yaml";
 import matter from "gray-matter";
 import { remark } from "remark";
 import html from "remark-html";
 
-
 // 今回使用するコンテンツのリポジトリ
 const REPO_OWNER = "gizag889";
-const REPO_NAME = "shin-aoblog";
+const REPO_NAME = "ec-content";
 // GitHub API URL
 const RAW_CONTENT_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main`;
 const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents`;
@@ -20,11 +26,11 @@ export async function fetchDirectoryContents(
   const response = await fetch(`${API_URL}/${path}`, {
     cache: "force-cache",
   });
- 
+
   if (!response.ok) {
     throw new Error(`GitHub API error: ${response.status}`);
   }
- 
+
   return await response.json();
 }
 
@@ -36,7 +42,7 @@ export async function fetchFileContent(path: string) {
   if (!response.ok) {
     throw new Error(`Failed to fetch file: ${response.status}`);
   }
- 
+
   return await response.text();
 }
 
@@ -56,12 +62,12 @@ export async function parseMarkdown(markdown: string): Promise<ParsedMarkdown> {
   //const { data, content } = オブジェクト と書くことで、そのオブジェクトの中から data という名前のプロパティと content という名前のプロパティだけを抜き出して、同じ名前の変数に代入しています。
   //いわゆる分割代入
   const { data, content } = matter(markdown);
- 
+
   // remarkでMarkdownをHTMLに変換
   const processedContent = await remark()
     .use(html, { sanitize: false })
     .process(content);
- 
+
   return {
     frontMatter: data as ArticleFrontMatter,
     content: processedContent.toString(),
@@ -71,7 +77,7 @@ export async function parseMarkdown(markdown: string): Promise<ParsedMarkdown> {
 // 記事一覧を取得
 export async function fetchArticles(): Promise<Article[]> {
   const contents = await fetchDirectoryContents("articles");
- 
+
   // .keepファイルやディレクトリを除外
   const articleFiles = contents.filter(
     (item: GitHubItem) =>
@@ -84,9 +90,9 @@ export async function fetchArticles(): Promise<Article[]> {
   const articles = await Promise.all(
     articleFiles.map(async (file) => {
       const markdown = await fetchFileContent(`articles/${file.name}`);
- 
+
       const { frontMatter, content } = await parseMarkdown(markdown);
- 
+
       return {
         id: file.name.replace(".md", ""),
         title: frontMatter.title || "タイトルなし",
@@ -103,20 +109,19 @@ export async function fetchArticles(): Promise<Article[]> {
       };
     })
   );
- 
+
   // nullを除外して返す
   return articles.filter((article) => article !== null);
 }
 
 // 本一覧を取得
 export async function fetchBooks(): Promise<Book[]> {
+  const contents = await fetchDirectoryContents("books");
 
- const contents = await fetchDirectoryContents("books");
- 
   // ディレクトリのみを取得
   //dirとはGitBookのソースとなっているMarkdownファイル群のうちのひとつ
   const bookDirectories = contents.filter((item) => item.type === "dir");
- 
+
   // 各本のメタデータを取得
   const books = await Promise.all(
     bookDirectories.map(async (dir) => {
@@ -124,17 +129,17 @@ export async function fetchBooks(): Promise<Book[]> {
       const configContent = await fetchFileContent(
         `books/${dir.name}/config.yaml`
       );
- 
+
       if (!configContent) {
         return null;
       }
 
-     // YAML形式の設定ファイルをパース
+      // YAML形式の設定ファイルをパース
       const config = parseYaml<BookConfig>(configContent);
- 
+
       // 表紙画像のパス
       const coverImagePath = `${RAW_CONTENT_URL}/books/${dir.name}/cover.png`;
- 
+
       // 章の一覧を取得
       const chapterContents = await fetchDirectoryContents(`books/${dir.name}`);
       const chapters = chapterContents
@@ -150,7 +155,7 @@ export async function fetchBooks(): Promise<Book[]> {
           const bNum = parseInt(b.name.split(".")[0]) || 0;
           return aNum - bNum;
         });
-         return {
+      return {
         id: dir.name,
         title: config.title || dir.name,
         description: config.summary || "",
@@ -165,7 +170,7 @@ export async function fetchBooks(): Promise<Book[]> {
       };
     })
   );
- 
+
   // nullを除外して返す
   return books.filter((book) => book !== null);
 }
@@ -174,17 +179,17 @@ export async function fetchBooks(): Promise<Book[]> {
 export async function fetchBook(slug: string): Promise<Book | null> {
   // configファイルを取得
   const configContent = await fetchFileContent(`books/${slug}/config.yaml`);
- 
+
   if (!configContent) {
     return null;
   }
- 
+
   // YAML形式の設定ファイルをパース
   const config = parseYaml<BookConfig>(configContent);
- 
+
   // 本のディレクトリ内の章を取得
   const contents = await fetchDirectoryContents(`books/${slug}`);
- 
+
   // Markdownファイルのみをフィルタリング
   const chapterFiles = contents
     .filter(
@@ -199,7 +204,7 @@ export async function fetchBook(slug: string): Promise<Book | null> {
       const bNum = parseInt(b.name.split(".")[0]) || 0;
       return aNum - bNum;
     });
- 
+
   if (chapterFiles.length === 0) {
     return null;
   }
@@ -207,18 +212,17 @@ export async function fetchBook(slug: string): Promise<Book | null> {
   // 各章の内容を取得
   const chapters = await Promise.all(
     chapterFiles.map(async (file, index: number) => {
-
       const markdown = await fetchFileContent(`books/${slug}/${file.name}`);
- 
+
       if (!markdown) {
         return null;
       }
- 
+
       const { frontMatter, content } = await parseMarkdown(markdown);
- 
+
       // チャプターのスラッグは、ファイル名から拡張子を除いたもの
       const chapterSlug = file.name.replace(".md", "");
- 
+
       return {
         slug: chapterSlug,
         title: frontMatter.title || `Chapter ${index + 1}`,
@@ -227,7 +231,6 @@ export async function fetchBook(slug: string): Promise<Book | null> {
       };
     })
   );
-
 
   return {
     id: slug,
